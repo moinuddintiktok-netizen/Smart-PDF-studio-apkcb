@@ -1,1 +1,36 @@
+app:
+  name: "Smart PDF Studio – VIP Edition"
+  version: "1.0.0"
+  platform: "Android"
+  package: "com.chishtibro.smartpdfstudio"
+  author: "Moinuddin Chishti"
+  brand: "Chishti Bro Computers and Developers"
+  mode: "offline-first"
 
+features:
+  smart_pdf_toolkit:
+    word_to_pdf: true
+    pdf_to_word: true
+    images_to_pdf: true
+    merge_pdf: true
+    split_pdf: true
+    password_protect_pdf: true
+    unlock_pdf_with_password: true
+  pc_cleaner_mobile:
+    temp_file_scan: true
+    storage_overview: true
+    note: "Android scoped-storage rules limit access/deletion outside permitted locations."
+  file_organizer:
+    extension_based_categories: true
+    collision_safe_moves: true
+  duplicate_finder:
+    sha256: true
+
+android:
+  build_system: "Buildozer / python-for-android"
+  output: "APK"
+  architectures: ["arm64-v8a", "armeabi-v7a"]
+
+notes:
+  - "This YAML describes the Android app/build contract; it is not itself a Python-to-Dart converter."
+  - "Complex DOCX layouts are rendered as text in the mobile Word-to-PDF implementation."
