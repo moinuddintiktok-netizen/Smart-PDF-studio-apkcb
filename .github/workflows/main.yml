@@ -60,16 +60,52 @@ jobs:
           python -m pip install "cython==0.29.34"
           python -m pip install --upgrade buildozer
 
-      - name: Verify project files
+      - name: Prepare patched python-for-android
         run: |
           set -e
 
-          echo "Checking project files..."
+          rm -rf .p4a-source
+
+          git clone \
+            --depth 1 \
+            --branch develop \
+            https://github.com/kivy/python-for-android.git \
+            .p4a-source
+
+          REPORTLAB_RECIPE=".p4a-source/pythonforandroid/recipes/reportlab/__init__.py"
+
+          test -f "$REPORTLAB_RECIPE"
+
+          python - <<'PY'
+          from pathlib import Path
+
+          p = Path(".p4a-source/pythonforandroid/recipes/reportlab/__init__.py")
+          s = p.read_text()
+
+          s = s.replace(
+              "url = 'https://hg.reportlab.com/hg-public/reportlab/archive/{version}.tar.gz'",
+              "url = 'https://files.pythonhosted.org/packages/source/r/reportlab/reportlab-3.3.0.tar.gz'"
+          )
+
+          s = s.replace(
+              'http://www.reportlab.com/ftp/pfbfer-20070710.zip',
+              'https://www.reportlab.com/ftp/fonts/pfbfer-20070710.zip'
+          )
+
+          p.write_text(s)
+          PY
+
+          echo "Patched ReportLab recipe:"
+          grep -n "version\|url =\|pfbfer" "$REPORTLAB_RECIPE"
+
+          echo "APP_P4A_SOURCE_DIR=$GITHUB_WORKSPACE/.p4a-source" >> "$GITHUB_ENV"
+
+      - name: Verify project
+        run: |
+          set -e
 
           test -f main.py
           test -f buildozer.spec
-
-          echo "Checking buildozer.spec..."
 
           grep -Eq '^[[:space:]]*title[[:space:]]*=' buildozer.spec
           grep -Eq '^[[:space:]]*package.name[[:space:]]*=' buildozer.spec
@@ -108,11 +144,7 @@ jobs:
           echo " BIN DIRECTORY"
           echo "=========================================="
 
-          if [ -d "bin" ]; then
-            find bin -type f -print || true
-          else
-            echo "bin directory does not exist."
-          fi
+          find bin -type f -print 2>/dev/null || true
 
           echo ""
           echo "=========================================="
@@ -129,22 +161,12 @@ jobs:
           APK="$(find bin -type f -name '*.apk' -print -quit)"
 
           if [ -z "$APK" ]; then
-            echo ""
-            echo "=========================================="
-            echo " ERROR: APK NOT FOUND"
-            echo "=========================================="
-            echo "Buildozer did not generate an APK."
-            echo ""
-            echo "Check the uploaded build.log artifact."
+            echo "ERROR: No APK was generated."
+            echo "The real Buildozer log is in build.log."
             exit 1
           fi
 
-          echo ""
-          echo "=========================================="
-          echo " APK FOUND"
-          echo "=========================================="
-          echo "$APK"
-
+          echo "APK found: $APK"
           echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
 
       - name: Upload APK
@@ -168,10 +190,6 @@ jobs:
       - name: Final build status
         if: always()
         run: |
-          echo "=========================================="
-          echo " SMART PDF STUDIO BUILD FINISHED"
-          echo "=========================================="
-
           if [ "${{ steps.build_apk.outcome }}" != "success" ]; then
             echo "Buildozer reported a build failure."
             exit 1
@@ -182,4 +200,4 @@ jobs:
             exit 1
           fi
 
-          echo "APK build completed successfully."
+          echo "Smart PDF Studio APK build completed successfully."
