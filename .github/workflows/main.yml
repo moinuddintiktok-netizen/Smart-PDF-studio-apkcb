@@ -1,203 +1,35 @@
-name: Build Smart PDF Studio APK
+name: Build Ultimate PDF Toolkit & PC Cleaner Suite
 
 on:
-  workflow_dispatch:
   push:
-    branches:
-      - main
-  pull_request:
-    branches:
-      - main
-
-permissions:
-  contents: read
+    branches: [ "main", "master" ]
+  workflow_dispatch:
 
 jobs:
-  build-android:
-    name: Build Smart PDF Studio APK
-    runs-on: ubuntu-24.04
+  build:
+    runs-on: windows-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v5
+    - name: Checkout Repository
+      uses: actions/checkout@v4
 
-      - name: Setup Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: "3.11"
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
 
-      - name: Setup Java 17
-        uses: actions/setup-java@v6
-        with:
-          distribution: temurin
-          java-version: "17"
+    - name: Install Dependencies
+      run: |
+        python -m pip install --upgrade pip setuptools wheel
+        pip install pypdf pdf2docx docx2pdf Pillow PyMuPDF pyinstaller
 
-      - name: Install Android build dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y \
-            git \
-            zip \
-            unzip \
-            autoconf \
-            automake \
-            autopoint \
-            libtool \
-            pkg-config \
-            zlib1g-dev \
-            libncurses5-dev \
-            libncursesw5-dev \
-            libtinfo6 \
-            cmake \
-            libffi-dev \
-            libssl-dev \
-            gettext \
-            build-essential
+    - name: Build Executable with PyInstaller
+      run: |
+        python -m PyInstaller --noconsole --onefile ultimate_suite.py
 
-      - name: Install Buildozer
-        run: |
-          python -m pip install --upgrade pip setuptools wheel
-          python -m pip install "cython==0.29.34"
-          python -m pip install --upgrade buildozer
-
-      - name: Prepare patched python-for-android
-        run: |
-          set -e
-
-          rm -rf .p4a-source
-
-          git clone \
-            --depth 1 \
-            --branch develop \
-            https://github.com/kivy/python-for-android.git \
-            .p4a-source
-
-          REPORTLAB_RECIPE=".p4a-source/pythonforandroid/recipes/reportlab/__init__.py"
-
-          test -f "$REPORTLAB_RECIPE"
-
-          python - <<'PY'
-          from pathlib import Path
-
-          p = Path(".p4a-source/pythonforandroid/recipes/reportlab/__init__.py")
-          s = p.read_text()
-
-          s = s.replace(
-              "url = 'https://hg.reportlab.com/hg-public/reportlab/archive/{version}.tar.gz'",
-              "url = 'https://files.pythonhosted.org/packages/source/r/reportlab/reportlab-3.3.0.tar.gz'"
-          )
-
-          s = s.replace(
-              'http://www.reportlab.com/ftp/pfbfer-20070710.zip',
-              'https://www.reportlab.com/ftp/fonts/pfbfer-20070710.zip'
-          )
-
-          p.write_text(s)
-          PY
-
-          echo "Patched ReportLab recipe:"
-          grep -n "version\|url =\|pfbfer" "$REPORTLAB_RECIPE"
-
-          echo "APP_P4A_SOURCE_DIR=$GITHUB_WORKSPACE/.p4a-source" >> "$GITHUB_ENV"
-
-      - name: Verify project
-        run: |
-          set -e
-
-          test -f main.py
-          test -f buildozer.spec
-
-          grep -Eq '^[[:space:]]*title[[:space:]]*=' buildozer.spec
-          grep -Eq '^[[:space:]]*package.name[[:space:]]*=' buildozer.spec
-          grep -Eq '^[[:space:]]*package.domain[[:space:]]*=' buildozer.spec
-
-          echo "Project verification successful."
-
-          buildozer --version
-          python --version
-          java -version
-
-      - name: Clean previous Buildozer output
-        run: |
-          rm -rf .buildozer
-          rm -rf bin
-          mkdir -p bin
-
-      - name: Build Android APK
-        id: build_apk
-        continue-on-error: true
-        env:
-          BUILDOZER_WARN_ON_ROOT: "0"
-        run: |
-          set -o pipefail
-
-          echo "=========================================="
-          echo " BUILDING SMART PDF STUDIO APK"
-          echo "=========================================="
-
-          buildozer -v android debug 2>&1 | tee build.log
-
-      - name: Show Buildozer output
-        if: always()
-        run: |
-          echo "=========================================="
-          echo " BIN DIRECTORY"
-          echo "=========================================="
-
-          find bin -type f -print 2>/dev/null || true
-
-          echo ""
-          echo "=========================================="
-          echo " APK SEARCH"
-          echo "=========================================="
-
-          find . -type f -name "*.apk" -print || true
-
-      - name: Find generated APK
-        id: find_apk
-        run: |
-          set -e
-
-          APK="$(find bin -type f -name '*.apk' -print -quit)"
-
-          if [ -z "$APK" ]; then
-            echo "ERROR: No APK was generated."
-            echo "The real Buildozer log is in build.log."
-            exit 1
-          fi
-
-          echo "APK found: $APK"
-          echo "apk_path=$APK" >> "$GITHUB_OUTPUT"
-
-      - name: Upload APK
-        if: success()
-        uses: actions/upload-artifact@v4
-        with:
-          name: SmartPDFStudio-Android-APK
-          path: ${{ steps.find_apk.outputs.apk_path }}
-          if-no-files-found: error
-          retention-days: 30
-
-      - name: Upload build log
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: SmartPDFStudio-build-log
-          path: build.log
-          if-no-files-found: ignore
-          retention-days: 7
-
-      - name: Final build status
-        if: always()
-        run: |
-          if [ "${{ steps.build_apk.outcome }}" != "success" ]; then
-            echo "Buildozer reported a build failure."
-            exit 1
-          fi
-
-          if [ "${{ steps.find_apk.outcome }}" != "success" ]; then
-            echo "APK was not found."
-            exit 1
-          fi
-
-          echo "Smart PDF Studio APK build completed successfully."
+    - name: Upload Compiled EXE Artifact
+      uses: actions/upload-artifact@v4
+      with:
+        name: Ultimate-PDF-Toolkit-PC-Cleaner-Suite
+        path: dist/ultimate_suite.exe
+        
